@@ -40,13 +40,23 @@ jobs:
           SQL_PASSWORD: ${{ secrets.SQL_PASSWORD }}
           SQL_DB: ${{ secrets.SQL_DB }}
         run: |
-          echo "Running Data Quality Checks..."
-          sqlcmd -S $SQL_SERVER -U $SQL_USER -P $SQL_PASSWORD -d $SQL_DB -i sql/data_quality_checks.sql -o results.txt
+          echo "🔍 Running Data Quality Checks..."
+          sqlcmd -S $SQL_SERVER -U $SQL_USER -P $SQL_PASSWORD -d $SQL_DB -i sql/data_quality_checks.sql -W -s"," -o results.csv
 
-          echo "Results from data checks:"
-          cat results.txt
+          echo "📊 Results:"
+          cat results.csv
 
-          if grep -E "MissingCustomerID|InvalidAmounts|NullFields" results.txt | grep -v "0"; then
+          MISSING=$(grep "MissingCustomerID" -A 1 results.csv | tail -n 1 | tr -d '\r')
+          INVALID=$(grep "InvalidAmounts" -A 1 results.csv | tail -n 1 | tr -d '\r')
+          NULLS=$(grep "NullFields" -A 1 results.csv | tail -n 1 | tr -d '\r')
+
+          echo "--------------------------------------"
+          echo "Missing Customers: $MISSING"
+          echo "Invalid Amounts: $INVALID"
+          echo "Null Fields: $NULLS"
+          echo "--------------------------------------"
+
+          if [ "$MISSING" != "0" ] || [ "$INVALID" != "0" ] || [ "$NULLS" != "0" ]; then
             echo "❌ Data Quality Checks Failed!"
             exit 1
           else
