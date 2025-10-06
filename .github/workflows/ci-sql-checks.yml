@@ -1,64 +1,27 @@
-name: Run SQL Data Quality Checks
+name: SQL Validation
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # Manual trigger
+  pull_request:
 
 jobs:
-  sql-checks:
+  validate-sql:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install SQLCMD
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y curl apt-transport-https gnupg
+          pip install pytest
 
-          # Add Microsoft repository for SQL tools
-          curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
-          curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
-
-          sudo apt-get update
-          sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
-
-          # Add sqlcmd to PATH for all steps
-          echo "/opt/mssql-tools18/bin" >> $GITHUB_PATH
-
-      - name: Verify SQLCMD installation
+      - name: Run SQL validation tests
         run: |
-          which sqlcmd || echo "sqlcmd not found in PATH"
-          sqlcmd -? | head -n 5
-
-      - name: Run SQL Data Quality Checks
-        env:
-          SQL_SERVER: ${{ secrets.SQL_SERVER }}
-          SQL_USER: ${{ secrets.SQL_USER }}
-          SQL_PASSWORD: ${{ secrets.SQL_PASSWORD }}
-          SQL_DB: ${{ secrets.SQL_DB }}
-        run: |
-          echo "🔍 Running Data Quality Checks..."
-          sqlcmd -S $SQL_SERVER -U $SQL_USER -P $SQL_PASSWORD -d $SQL_DB -i sql/data_quality_checks.sql -W -s"," -o results.csv
-
-          echo "📊 Results:"
-          cat results.csv
-
-          MISSING=$(grep "MissingCustomerID" -A 1 results.csv | tail -n 1 | tr -d '\r')
-          INVALID=$(grep "InvalidAmounts" -A 1 results.csv | tail -n 1 | tr -d '\r')
-          NULLS=$(grep "NullFields" -A 1 results.csv | tail -n 1 | tr -d '\r')
-
-          echo "--------------------------------------"
-          echo "Missing Customers: $MISSING"
-          echo "Invalid Amounts: $INVALID"
-          echo "Null Fields: $NULLS"
-          echo "--------------------------------------"
-
-          if [ "$MISSING" != "0" ] || [ "$INVALID" != "0" ] || [ "$NULLS" != "0" ]; then
-            echo "❌ Data Quality Checks Failed!"
-            exit 1
-          else
-            echo "✅ All Data Quality Checks Passed!"
-          fi
+          pytest -v
